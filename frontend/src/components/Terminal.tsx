@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import type { CliResult } from "../types";
+
+interface Line {
+  kind: "hint" | "cmd" | "out" | "err";
+  text: string;
+  cwd?: string;
+}
 
 const WELCOME = "Sandboxed terminal. Try: dotnet --version, dotnet new console -n hello, cd hello, dotnet run. Type help for more.";
 
@@ -17,17 +25,17 @@ function sessionId() {
 }
 
 // Minimal terminal. `onRun(session, command)` resolves to {ok, output, cwd}.
-export default function Terminal({ onRun }) {
-  const [lines, setLines] = useState([{ kind: "hint", text: WELCOME }]);
+export default function Terminal({ onRun }: { onRun: (session: string, command: string) => Promise<CliResult> }) {
+  const [lines, setLines] = useState<Line[]>([{ kind: "hint", text: WELCOME }]);
   const [cwd, setCwd] = useState("~");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const history = useRef([]);
+  const history = useRef<string[]>([]);
   const cursor = useRef(0);
   const session = useRef(sessionId());
-  const scroller = useRef(null);
-  const inputRef = useRef(null);
-  const root = useRef(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
@@ -36,8 +44,8 @@ export default function Terminal({ onRun }) {
   // The input keeps focus until the user clicks somewhere outside the terminal.
   const clickedOutside = useRef(false);
   useEffect(() => {
-    const onDown = (e) => {
-      clickedOutside.current = !root.current?.contains(e.target);
+    const onDown = (e: MouseEvent) => {
+      clickedOutside.current = !root.current?.contains(e.target as Node);
     };
     document.addEventListener("mousedown", onDown, true);
     return () => document.removeEventListener("mousedown", onDown, true);
@@ -69,16 +77,16 @@ export default function Terminal({ onRun }) {
     try {
       const res = await onRun(session.current, command);
       setCwd(res.cwd);
-      if (res.output) setLines((l) => [...l, { kind: res.ok ? "out" : "err", text: res.output }]);
+      if (res.output) setLines((l) => [...l, { kind: res.ok ? "out" : "err", text: res.output } as Line]);
     } catch (e) {
-      setLines((l) => [...l, { kind: "err", text: e.message }]);
+      setLines((l) => [...l, { kind: "err", text: (e as Error).message }]);
     } finally {
       setBusy(false);
       inputRef.current?.focus();
     }
   }
 
-  function onKeyDown(e) {
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
       submit();

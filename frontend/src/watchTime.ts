@@ -1,18 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api.js";
+import { api } from "./api";
+
+interface YTPlayer {
+  getCurrentTime?: () => number;
+  destroy?: () => void;
+}
+interface YTNamespace {
+  Player: new (
+    el: HTMLElement,
+    opts: {
+      videoId: string;
+      playerVars: Record<string, number>;
+      events: { onStateChange: (e: { data: number }) => void };
+    }
+  ) => YTPlayer;
+  PlayerState: { PLAYING: number };
+}
+declare global {
+  interface Window {
+    YT?: YTNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+interface AwayRecord {
+  lessonId: number | string;
+  t: number;
+  cap?: number;
+}
 
 const FLUSH_EVERY = 5; // seconds of watching between reports to the server (a refresh loses at most this much)
 const FALLBACK_CAP = 2 * 3600; // longest YouTube visit we'll credit when the duration is unknown
 
 // "12:34", "1:02:03" or "12 min" -> seconds; 0 when unparseable.
-export function parseDuration(text) {
+export function parseDuration(text?: string | null) {
   if (!text) return 0;
   if (text.includes(":")) return text.split(":").reduce((t, p) => t * 60 + (parseInt(p, 10) || 0), 0);
   const m = text.match(/\d+/);
   return m ? parseInt(m[0], 10) * 60 : 0;
 }
 
-export function formatWatched(seconds) {
+export function formatWatched(seconds: number) {
   const s = Math.floor(seconds);
   if (s < 60) return `${s}s`;
   const h = Math.floor(s / 3600);
@@ -20,21 +48,21 @@ export function formatWatched(seconds) {
   return h ? `${h}h ${m}m` : `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
-export function formatClock(seconds) {
+export function formatClock(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = String(seconds % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
-let apiPromise;
-function loadYouTubeApi() {
+let apiPromise: Promise<YTNamespace> | undefined;
+function loadYouTubeApi(): Promise<YTNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT);
-  apiPromise ??= new Promise((resolve, reject) => {
+  apiPromise ??= new Promise<YTNamespace>((resolve, reject) => {
     const prev = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       prev?.();
-      resolve(window.YT);
+      resolve(window.YT!);
     };
     const s = document.createElement("script");
     s.src = "https://www.youtube.com/iframe_api";
@@ -53,9 +81,9 @@ const AWAY_KEY = "watch-away";
 
 function settleAway() {
   if (document.visibilityState === "hidden") return;
-  let away;
+  let away: AwayRecord | null;
   try {
-    away = JSON.parse(localStorage.getItem(AWAY_KEY));
+    away = JSON.parse(localStorage.getItem(AWAY_KEY) ?? "null");
     localStorage.removeItem(AWAY_KEY);
   } catch {
     return;
@@ -78,15 +106,19 @@ document.addEventListener("visibilitychange", settleAway);
  *    clicking the link and coming back to this site (capped at the video's length).
  * The server is the source of truth: totals and position are fetched whenever the Video tab mounts.
  */
-export function useWatchTime({ lessonId, videoId, duration }) {
+export function useWatchTime({ lessonId, videoId, duration }: {
+  lessonId: number | string;
+  videoId: string;
+  duration?: string;
+}) {
   const [total, setTotal] = useState(0);
   const [position, setPosition] = useState(0);
   const [ready, setReady] = useState(false);
   const pending = useRef(0);
   const startAt = useRef(0); // where a newly created player starts
-  const lastPos = useRef(null); // last known playback position, null = nothing new to save
-  const player = useRef(null);
-  const cleanup = useRef(null);
+  const lastPos = useRef<number | null>(null); // last known playback position, null = nothing new to save
+  const player = useRef<YTPlayer | null>(null);
+  const cleanup = useRef<(() => void) | null>(null);
 
   const refresh = useCallback(
     () =>
@@ -131,7 +163,7 @@ export function useWatchTime({ lessonId, videoId, duration }) {
   );
 
   const credit = useCallback(
-    (seconds) => {
+    (seconds: number) => {
       pending.current += seconds;
       setTotal((t) => t + seconds);
       if (pending.current >= FLUSH_EVERY) flush();
@@ -154,13 +186,13 @@ export function useWatchTime({ lessonId, videoId, duration }) {
 
   // Embedded player: credit elapsed wall-clock time while it is playing.
   const mountPlayer = useCallback(
-    (host) => {
+    (host: HTMLDivElement | null) => {
       cleanup.current?.(); // flushes using the old player's position, so run before destroy
       cleanup.current = null;
       player.current?.destroy?.();
       player.current = null;
       if (!host) return;
-      let timer;
+      let timer: ReturnType<typeof setInterval> | undefined;
       let last = 0;
       let dead = false;
       const tick = () => {

@@ -1,15 +1,16 @@
 import { useEffect } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { api } from "./api.js";
-import Dashboard from "./pages/Dashboard.jsx";
-import LessonPage from "./pages/LessonPage.jsx";
+import { api } from "./api";
+import type { LessonRef } from "./types";
+import Dashboard from "./pages/Dashboard";
+import LessonPage from "./pages/LessonPage";
 
 // Resolves a module/playground link to the first unfinished lesson.
-function Redirect({ load }) {
+function Redirect({ load }: { load: (moduleId: string) => Promise<LessonRef> }) {
   const navigate = useNavigate();
   const { moduleId } = useParams();
   useEffect(() => {
-    load(moduleId)
+    load(moduleId ?? "")
       .then(({ lesson_id }) => navigate(`/lessons/${lesson_id}`, { replace: true }))
       .catch(() => navigate("/", { replace: true }));
   }, [load, moduleId, navigate]);

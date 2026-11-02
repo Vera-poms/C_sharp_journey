@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api.js";
-import { addBookmark, locateBookmark, useBookmarks, removeBookmark, selectionToPosition } from "../bookmarks.js";
-import Editor from "../components/Editor.jsx";
-import Terminal from "../components/Terminal.jsx";
-import { Block, CodeBlock, Highlight, Inline } from "../components/Rich.jsx";
-import { formatClock, formatWatched, useWatchTime } from "../watchTime.js";
+import { api } from "../api";
+import { addBookmark, locateBookmark, useBookmarks, removeBookmark, selectionToPosition } from "../bookmarks";
+import Editor from "../components/Editor";
+import Terminal from "../components/Terminal";
+import { Block, CodeBlock, Highlight, Inline } from "../components/Rich";
+import { formatClock, formatWatched, useWatchTime } from "../watchTime";
+import type { Bookmark, Lesson, Resource } from "../types";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
-function Reading({ lesson }) {
+function Reading({ lesson }: { lesson: Lesson }) {
   const ca = lesson.codealong;
-  const ref = useRef(null);
-  const [pending, setPending] = useState(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState<ReturnType<typeof selectionToPosition>>(null);
 
   // Offer a bookmark button next to a freshly selected word (double-click or drag).
   function onSelect() {
@@ -24,9 +26,9 @@ function Reading({ lesson }) {
   function save() {
     addBookmark({
       lessonId: lesson.id,
-      block: pending.block,
-      offset: pending.offset,
-      word: pending.word,
+      block: pending!.block,
+      offset: pending!.offset,
+      word: pending!.word,
       title: lesson.title,
       moduleNumber: lesson.module.number,
     });
@@ -70,8 +72,8 @@ function Reading({ lesson }) {
   );
 }
 
-function ResourceList({ resources }) {
-  const groups = [];
+function ResourceList({ resources }: { resources: Resource[] }) {
+  const groups: { source: string; items: Resource[] }[] = [];
   for (const r of resources) {
     let g = groups.find((x) => x.source === r.source);
     if (!g) groups.push((g = { source: r.source, items: [] }));
@@ -87,8 +89,8 @@ function ResourceList({ resources }) {
   ));
 }
 
-function Video({ lesson }) {
-  const v = lesson.video;
+function Video({ lesson }: { lesson: Lesson }) {
+  const v = lesson.video!;
   const [playing, setPlaying] = useState(false);
   useEffect(() => setPlaying(false), [v.youtube_id]);
   const { total, position, ready, mountPlayer, leftForYouTube } = useWatchTime({
@@ -133,7 +135,7 @@ function Video({ lesson }) {
   );
 }
 
-function Resources({ lesson }) {
+function Resources({ lesson }: { lesson: Lesson }) {
   return (
     <div className="lesson-content">
       <h1 className="tab-title">Resources</h1>
@@ -145,8 +147,8 @@ function Resources({ lesson }) {
   );
 }
 
-function Lab({ lesson, onSubmitted }) {
-  const lab = lesson.lab;
+function Lab({ lesson, onSubmitted }: { lesson: Lesson; onSubmitted: () => void }) {
+  const lab = lesson.lab!;
   const [showHint, setShowHint] = useState(false);
   return (
     <div className="lesson-content reading">
@@ -186,7 +188,7 @@ function Lab({ lesson, onSubmitted }) {
                       setResult(await api.submitLab(lesson.id, code));
                       onSubmitted();
                     } catch (e) {
-                      setResult({ ok: false, output: e.message });
+                      setResult({ ok: false, output: (e as Error).message });
                     }
                   }}
                 >
@@ -234,8 +236,8 @@ export default function LessonPage() {
   const { lessonId } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const [lesson, setLesson] = useState(null);
-  const [error, setError] = useState(null);
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showPractice, setShowPractice] = useState(true);
   const [mode, setMode] = useState("code");
   const [practiceWidth, setPracticeWidth] = useState(() => {
@@ -248,13 +250,13 @@ export default function LessonPage() {
   });
 
   // Drag the panel's left edge; the panel is on the right, so moving left widens it.
-  function startResize(e) {
+  function startResize(e: ReactPointerEvent) {
     e.preventDefault();
     const startX = e.clientX;
     const startW = practiceWidth;
     const max = Math.max(MIN_PRACTICE, window.innerWidth - 360);
     let width = startW;
-    const onMove = (ev) => {
+    const onMove = (ev: PointerEvent) => {
       width = Math.round(Math.min(max, Math.max(MIN_PRACTICE, startW + startX - ev.clientX)));
       setPracticeWidth(width);
     };
@@ -274,7 +276,7 @@ export default function LessonPage() {
   }
 
   const load = useCallback(
-    () => api.lesson(lessonId).then(setLesson).catch((e) => setError(e.message)),
+    () => api.lesson(lessonId!).then(setLesson).catch((e) => setError(e.message)),
     [lessonId]
   );
 
@@ -286,11 +288,11 @@ export default function LessonPage() {
 
   // Arriving from a nav-bar bookmark: jump to the word, then drop the bookmark to free its slot.
   const location = useLocation();
-  const bookmark = location.state?.bookmark;
+  const bookmark = location.state?.bookmark as Bookmark | undefined;
   const onReading = !params.get("tab") || params.get("tab") === "reading";
   useEffect(() => {
     if (!bookmark || !lesson || lesson.id !== bookmark.lessonId || !onReading) return;
-    const root = document.querySelector(".lesson-content.reading");
+    const root = document.querySelector<HTMLElement>(".lesson-content.reading");
     if (!root) return;
     locateBookmark(root, bookmark);
     removeBookmark(bookmark.lessonId);
@@ -309,6 +311,7 @@ export default function LessonPage() {
   const tab = tabs.find((t) => t.id === params.get("tab"))?.id ?? "reading";
 
   async function toggleComplete() {
+    if (!lesson) return;
     await (lesson.completed ? api.uncomplete(lesson.id) : api.complete(lesson.id));
     load();
   }
@@ -356,7 +359,7 @@ export default function LessonPage() {
           className={`lesson-split${showPractice ? "" : " no-practice"}`}
           style={
             tab === "reading" || tab === "video"
-              ? { "--practice-width": `${practiceWidth}px` }
+              ? ({ "--practice-width": `${practiceWidth}px` } as CSSProperties)
               : { display: "none" }
           }
         >

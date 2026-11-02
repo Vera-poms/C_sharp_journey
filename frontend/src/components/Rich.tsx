@@ -1,7 +1,8 @@
 import { Fragment } from "react";
+import type { ReadingBlock } from "../types";
 
 // Inline markup used in lesson text: `code` and **bold**.
-export function Inline({ text }) {
+export function Inline({ text }: { text: string }) {
   return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, i) => {
     if (part.startsWith("`")) return <code key={i}>{part.slice(1, -1)}</code>;
     if (part.startsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
@@ -24,7 +25,7 @@ const KEYWORDS = new Set([
 const TOKEN = /(\/\/.*|\$?"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b\d[\d_]*(?:\.\d+)?[fm]?\b|\b[A-Za-z_]\w*\b)/g;
 
 // Small C# highlighter, enough for lesson snippets.
-export function Highlight({ code }) {
+export function Highlight({ code }: { code: string }) {
   return code.split(TOKEN).map((tok, i) => {
     if (tok.startsWith("//")) return <span key={i} className="cm">{tok}</span>;
     if (/^\$?["']/.test(tok)) return <span key={i} className="str">{tok}</span>;
@@ -34,7 +35,7 @@ export function Highlight({ code }) {
   });
 }
 
-export function CodeBlock({ code }) {
+export function CodeBlock({ code }: { code: string }) {
   return (
     <div className="code-block">
       <span className="lang-tag">C#</span>
@@ -43,27 +44,27 @@ export function CodeBlock({ code }) {
   );
 }
 
-const CALLOUT_ICONS = { note: "ⓘ", tip: "💡", warn: "⚠" };
+const CALLOUT_ICONS: Record<string, string> = { note: "ⓘ", tip: "💡", warn: "⚠" };
 
-export function Block({ block }) {
+export function Block({ block }: { block: ReadingBlock }) {
   switch (block.type) {
     case "h2":
-      return <h2><Inline text={block.text} /></h2>;
+      return <h2><Inline text={block.text ?? ""} /></h2>;
     case "p":
-      return <p><Inline text={block.text} /></p>;
+      return <p><Inline text={block.text ?? ""} /></p>;
     case "code":
-      return <CodeBlock code={block.code} />;
+      return <CodeBlock code={block.code ?? ""} />;
     case "callout":
       return (
         <div className={`callout callout-${block.kind}`}>
-          <span className="callout-icon">{CALLOUT_ICONS[block.kind]}</span>
-          <div><Inline text={block.text} /></div>
+          <span className="callout-icon">{CALLOUT_ICONS[block.kind ?? "note"]}</span>
+          <div><Inline text={block.text ?? ""} /></div>
         </div>
       );
     case "link":
       return (
         <a href={block.href} target="_blank" rel="noopener noreferrer" className="ms-link">
-          ↗ <Inline text={block.text} />
+          ↗ <Inline text={block.text ?? ""} />
         </a>
       );
     default:

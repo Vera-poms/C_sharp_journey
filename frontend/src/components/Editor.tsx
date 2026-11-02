@@ -7,6 +7,22 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { setDiagnostics } from "@codemirror/lint";
 import { csharp } from "@codemirror/legacy-modes/mode/clike";
 import { tags as t } from "@lezer/highlight";
+import type { ReactNode } from "react";
+import type { RunResult } from "../types";
+
+interface CompileError {
+  line: number;
+  col: number;
+  code: string;
+  message: string;
+}
+
+interface Status {
+  kind: "ok" | "err" | "warn";
+  label: string;
+  errors?: CompileError[];
+  diff?: { expected: string; got: string } | null;
+}
 
 const highlightStyle = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.operatorKeyword], color: "#c792ea" },
@@ -41,15 +57,15 @@ const theme = EditorView.theme(
 const ERROR_LINE = /^Program\.cs\((\d+),(\d+)\):\s*error\s+(\w+):\s*(.*)$/;
 
 // Split compiler output into structured errors (empty when it isn't a compile failure).
-function parseErrors(output) {
+function parseErrors(output: string): CompileError[] {
   return output
     .split("\n")
     .map((l) => ERROR_LINE.exec(l.trim()))
-    .filter(Boolean)
+    .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ line: +m[1], col: +m[2], code: m[3], message: m[4] }));
 }
 
-function classify(result) {
+function classify(result: RunResult | null): Status | null {
   if (!result) return null;
   if (result.ok) {
     return result.output.startsWith("✓")
@@ -67,10 +83,18 @@ function classify(result) {
 
 // Editor + run button + output. `onRun(code)` resolves to {ok, output}.
 // With `storageKey`, the code is kept in localStorage so it survives reloads.
-export default function Editor({ filename, onRun, minHeight, footer, storageKey }) {
-  const host = useRef(null);
-  const view = useRef(null);
-  const runRef = useRef(null);
+interface EditorProps {
+  filename: string;
+  onRun: (code: string) => Promise<RunResult>;
+  minHeight?: number;
+  footer?: (ctx: { code: string; setResult: (r: RunResult | null) => void }) => ReactNode;
+  storageKey?: string;
+}
+
+export default function Editor({ filename, onRun, minHeight, footer, storageKey }: EditorProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
+  const runRef = useRef<() => Promise<void>>(async () => {});
   const [code, setCode] = useState(() => {
     try {
       return (storageKey && localStorage.getItem(storageKey)) || "";
@@ -78,18 +102,18 @@ export default function Editor({ filename, onRun, minHeight, footer, storageKey 
       return "";
     }
   });
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<RunResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [elapsed, setElapsed] = useState(null);
+  const [elapsed, setElapsed] = useState<number | null>(null);
 
   async function run() {
     if (busy) return;
     setBusy(true);
     const started = performance.now();
     try {
-      setResult(await onRun(view.current.state.doc.toString()));
+      setResult(await onRun(view.current!.state.doc.toString()));
     } catch (e) {
-      setResult({ ok: false, output: e.message });
+      setResult({ ok: false, output: (e as Error).message });
     } finally {
       setElapsed((performance.now() - started) / 1000);
       setBusy(false);
@@ -113,8 +137,8 @@ export default function Editor({ filename, onRun, minHeight, footer, storageKey 
         syntaxHighlighting(highlightStyle),
         EditorState.tabSize.of(4),
         keymap.of([
-          { key: "Shift-Enter", run: () => (runRef.current(), true) },
-          { key: "Mod-Enter", run: () => (runRef.current(), true) },
+          { key: "Shift-Enter", run: () => (void runRef.current(), true) },
+          { key: "Mod-Enter", run: () => (void runRef.current(), true) },
           ...closeBracketsKeymap,
           ...defaultKeymap,
           ...historyKeymap,
@@ -134,8 +158,8 @@ export default function Editor({ filename, onRun, minHeight, footer, storageKey 
         }),
       ],
     });
-    view.current = new EditorView({ state, parent: host.current });
-    return () => view.current.destroy();
+    view.current = new EditorView({ state, parent: host.current! });
+    return () => view.current!.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -152,12 +176,12 @@ export default function Editor({ filename, onRun, minHeight, footer, storageKey 
         const line = doc.line(e.line);
         const from = Math.min(line.from + Math.max(e.col - 1, 0), line.to);
         const to = Math.min(Math.max(from + 1, line.from + line.text.trimEnd().length), line.to);
-        return { from, to: Math.max(to, from), severity: "error", message: `${e.code}: ${e.message}` };
+        return { from, to: Math.max(to, from), severity: "error" as const, message: `${e.code}: ${e.message}` };
       });
     v.dispatch(setDiagnostics(v.state, diagnostics));
   }, [status]);
 
-  function jumpTo(err) {
+  function jumpTo(err: CompileError) {
     const v = view.current;
     if (!v || err.line > v.state.doc.lines) return;
     const line = v.state.doc.line(err.line);
@@ -211,7 +235,7 @@ export default function Editor({ filename, onRun, minHeight, footer, storageKey 
             </div>
           </div>
         ) : (
-          <pre className={result ? (status.kind === "ok" ? "out-ok" : "out-err") : "out-idle"}>
+          <pre className={result ? (status?.kind === "ok" ? "out-ok" : "out-err") : "out-idle"}>
             {result ? result.output : "Run your code to see output here."}
           </pre>
         )}

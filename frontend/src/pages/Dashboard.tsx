@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api.js";
-import { formatWatched } from "../watchTime.js";
+import { api } from "../api";
+import { formatWatched } from "../watchTime";
+import type { ModuleSummary, Stats } from "../types";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState(null);
-  const [modules, setModules] = useState(null);
-  const [error, setError] = useState(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [modules, setModules] = useState<ModuleSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.stats(), api.modules()])
