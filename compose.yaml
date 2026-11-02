@@ -1,0 +1,72 @@
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: csharp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-csharp}
+      POSTGRES_DB: csharp_journey
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Only the API can reach the database; learner code (runner) cannot.
+    networks: [data]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csharp -d csharp_journey"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # .NET 10 SDK container that compiles and runs learner code. It sits on its own
+  # internal network (no internet, no route to the database), runs code as an
+  # unprivileged user, and has a read-only root filesystem with no capabilities.
+  # (No mem/cpu/pids limits: this Podman VM lacks those cgroup controllers.)
+  runner:
+    build: ./runner
+    networks: [sandbox]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /work:mode=1777,size=256m
+      - /tmp:mode=1777,size=64m
+      # The dotnet CLI (`dotnet new` in the lesson terminal) caches templates under $HOME.
+      # NuGet unpacks packages restored from the offline feed here.
+      - /cache:mode=1777,size=256m
+      - /home/runner/.templateengine:mode=1777,size=32m
+      - /home/runner/.dotnet:mode=1777,size=32m
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://csharp:${POSTGRES_PASSWORD:-csharp}@db:5432/csharp_journey
+      RUNNER_URL: http://runner:8080
+    networks: [data, sandbox, public]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db:
+        condition: service_healthy
+      runner:
+        condition: service_started
+
+  web:
+    build: ./frontend
+    ports:
+      # Localhost only. Change to "8080:80" deliberately if you want LAN access.
+      - "127.0.0.1:8080:80"
+    networks: [public]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      - api
+
+networks:
+  public: {}
+  data:
+    internal: true
+  sandbox:
+    internal: true
+
+volumes:
+  pgdata:

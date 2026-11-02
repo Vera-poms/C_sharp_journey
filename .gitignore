@@ -1,0 +1,94 @@
+# --- Secrets & sensitive files ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.asc
+*.gpg
+id_rsa*
+id_ed25519*
+*.ppk
+secrets.*
+*.secret
+*.secrets
+credentials*.json
+service-account*.json
+appsettings.Development.json
+appsettings.Local.json
+*.user
+*.suo
+*.publishsettings
+.npmrc
+.pypirc
+.netrc
+
+# --- Databases & dumps ---
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.bak
+*.dump
+pgdata/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+dist/
+.vite/
+.parcel-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# --- .NET ---
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+.vs/
+TestResults/
+*.nupkg
+
+# --- Logs & temp ---
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Stray file in repo root ---
+/db

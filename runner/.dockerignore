@@ -1,0 +1,46 @@
+# .NET
+**/bin
+**/obj
+**/.vs
+*.pdb
+*.user
+*.suo
+TestResults
+
+# Secrets & sensitive files
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.gpg
+id_rsa*
+id_ed25519*
+secrets.*
+credentials*.json
+service-account*.json
+.npmrc
+.pypirc
+.netrc
+appsettings.Development.json
+appsettings.Local.json
+
+# VCS, IDE, OS, logs
+.git
+.gitignore
+.vscode
+.idea
+.claude
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+
+# Docs and Docker files not needed in the image
+Dockerfile*
+.dockerignore
+README.md
